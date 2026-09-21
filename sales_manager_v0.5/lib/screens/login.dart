@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_theme.dart';
 import '../services/supabase_service.dart';
 
@@ -20,8 +21,10 @@ class _LoginPageState extends State<LoginPage> {
         email: email.text.trim(),
         password: password.text,
       );
+    } on AuthException catch (e) {
+      setState(() => error = 'فشل تسجيل الدخول: ${e.message}');
     } catch (e) {
-      setState(() => error = 'تعذر تسجيل الدخول. تأكد من البريد وكلمة المرور.');
+      setState(() => error = 'خطأ غير متوقع: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
