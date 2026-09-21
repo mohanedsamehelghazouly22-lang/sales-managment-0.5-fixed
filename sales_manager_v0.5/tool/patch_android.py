@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""يجهّز مشروع الأندرويد لإشعارات flutter_local_notifications:
+"""يجهّز مشروع الأندرويد لإشعارات flutter_local_notifications وصلاحية الإنترنت:
   1) تفعيل core library desugaring في android/app/build.gradle(.kts)
   2) إضافة صلاحية POST_NOTIFICATIONS في AndroidManifest.xml
+  3) إضافة صلاحية INTERNET في AndroidManifest.xml
+     (Flutter بيحطها تلقائيًا في debug manifest بس، مش في main/release —
+      فبدونها أي build --release هيفشل بـ SocketException: Failed host lookup
+      حتى لو الجهاز متصل بالإنترنت فعليًا)
 آمن للتشغيل أكثر من مرة — لو التعديل موجود بالفعل مش بيعمل حاجة.
 الاستخدام (من جذر المشروع):  python3 tool/patch_android.py
 """
@@ -52,19 +56,38 @@ def patch_gradle(path: pathlib.Path) -> None:
         print(f'= {path.relative_to(ROOT)} جاهز بالفعل')
 
 
-def patch_manifest(path: pathlib.Path) -> None:
-    txt = path.read_text(encoding='utf-8')
-    if 'POST_NOTIFICATIONS' in txt:
-        print(f'= {path.relative_to(ROOT)} جاهز بالفعل')
-        return
-    perm = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>'
+def _insert_permission(txt: str, tag: str) -> str:
     m = re.search(r'<manifest[^>]*>', txt)
     if not m:
-        print('! لم أجد وسم manifest — أضف صلاحية POST_NOTIFICATIONS يدويًا')
-        return
-    txt = txt[:m.end()] + '\n' + perm + txt[m.end():]
-    path.write_text(txt, encoding='utf-8')
-    print(f'✓ تم تعديل {path.relative_to(ROOT)}')
+        raise ValueError('manifest tag not found')
+    return txt[:m.end()] + '\n    ' + tag + txt[m.end():]
+
+
+def patch_manifest(path: pathlib.Path) -> None:
+    txt = path.read_text(encoding='utf-8')
+    changed = False
+
+    if 'POST_NOTIFICATIONS' not in txt:
+        try:
+            txt = _insert_permission(
+                txt, '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>')
+            changed = True
+        except ValueError:
+            print('! لم أجد وسم manifest — أضف صلاحية POST_NOTIFICATIONS يدويًا')
+
+    if 'android.permission.INTERNET' not in txt:
+        try:
+            txt = _insert_permission(
+                txt, '<uses-permission android:name="android.permission.INTERNET"/>')
+            changed = True
+        except ValueError:
+            print('! لم أجد وسم manifest — أضف صلاحية INTERNET يدويًا')
+
+    if changed:
+        path.write_text(txt, encoding='utf-8')
+        print(f'✓ تم تعديل {path.relative_to(ROOT)}')
+    else:
+        print(f'= {path.relative_to(ROOT)} جاهز بالفعل')
 
 
 def main() -> None:
