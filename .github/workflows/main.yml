@@ -1,0 +1,138 @@
+name: Build Sales Manager (Android + Windows)
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_CHANNEL: stable
+
+jobs:
+  analyze:
+    name: Analyze & format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: تحقق من التنسيق (dart format)
+        run: dart format --output=none --set-exit-if-changed lib
+        continue-on-error: true
+
+      - name: flutter analyze
+        run: flutter analyze
+
+  build-android:
+    name: Build Android APK
+    needs: analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PUB_CACHE || '~/.pub-cache' }}
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: توليد مشروع Android (لو غير موجود)
+        run: |
+          if [ ! -d "android" ]; then
+            flutter create . --platforms=android --project-name=sales_manager --org=com.salesmanager
+          fi
+
+      - name: تجهيز Android لإشعارات flutter_local_notifications
+        run: python3 tool/patch_android.py
+
+      - name: flutter build apk --release
+        run: |
+          flutter build apk --release \
+            --split-per-abi \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+
+      - name: رفع ملفات APK كمخرجات
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-manager-android-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+  build-windows:
+    name: Build Windows exe
+    needs: analyze
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: ${{ env.FLUTTER_CHANNEL }}
+          cache: true
+
+      - name: Cache pub packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PUB_CACHE || '~/AppData/Local/Pub/Cache' }}
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+
+      - name: flutter pub get
+        run: flutter pub get
+
+      - name: توليد مشروع Windows (لو غير موجود)
+        shell: pwsh
+        run: |
+          if (!(Test-Path "windows")) {
+            flutter create . --platforms=windows --project-name=sales_manager --org=com.salesmanager
+          }
+
+      - name: flutter config --enable-windows-desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: flutter build windows --release
+        run: >
+          flutter build windows --release
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+
+      - name: ضغط مخرجات ويندوز في zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "sales-manager-windows.zip"
+
+      - name: رفع نسخة ويندوز كمخرجات
+        uses: actions/upload-artifact@v4
+        with:
+          name: sales-manager-windows
+          path: sales-manager-windows.zip
+          if-no-files-found: error
+          retention-days: 30
