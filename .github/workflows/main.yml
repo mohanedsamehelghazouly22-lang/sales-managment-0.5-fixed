@@ -1,5 +1,14 @@
 name: Build Sales Manager (Android + Windows)
 
+# ازاي تشغّله:
+# 1) ضع هذا الملف في مشروعك على المسار: .github/workflows/build.yml
+# 2) من إعدادات الريبو على GitHub: Settings > Secrets and variables > Actions
+#    أضف Secret باسم SUPABASE_URL وقيمته رابط مشروع Supabase
+#    أضف Secret باسم SUPABASE_PUBLISHABLE_KEY وقيمته الـ publishable/anon key
+#    (لا تضع service_role key هنا نهائيًا)
+# 3) أي Push على main أو أي Tag يبدأ بـ v (زي v0.5.0) هيشغّل البناء تلقائيًا،
+#    أو تقدر تشغّله يدويًا من تبويب Actions زر Run workflow.
+
 on:
   push:
     branches: [main]
@@ -14,11 +23,15 @@ concurrency:
 
 env:
   FLUTTER_CHANNEL: stable
+  PROJECT_DIR: sales_manager_v0.5
 
 jobs:
   analyze:
     name: Analyze & format check
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sales_manager_v0.5
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +54,9 @@ jobs:
     name: Build Android APK
     needs: analyze
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sales_manager_v0.5
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +74,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PUB_CACHE || '~/.pub-cache' }}
-          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+          key: pub-${{ runner.os }}-${{ hashFiles('sales_manager_v0.5/pubspec.yaml') }}
 
       - name: flutter pub get
         run: flutter pub get
@@ -83,7 +99,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sales-manager-android-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          path: sales_manager_v0.5/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -91,6 +107,9 @@ jobs:
     name: Build Windows exe
     needs: analyze
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: sales_manager_v0.5
     steps:
       - uses: actions/checkout@v4
 
@@ -103,7 +122,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PUB_CACHE || '~/AppData/Local/Pub/Cache' }}
-          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.yaml') }}
+          key: pub-${{ runner.os }}-${{ hashFiles('sales_manager_v0.5/pubspec.yaml') }}
 
       - name: flutter pub get
         run: flutter pub get
@@ -133,6 +152,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sales-manager-windows
-          path: sales-manager-windows.zip
+          path: sales_manager_v0.5/sales-manager-windows.zip
           if-no-files-found: error
           retention-days: 30
